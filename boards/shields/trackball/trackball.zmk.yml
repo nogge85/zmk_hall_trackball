@@ -1,0 +1,9 @@
+file_format: "1"
+id: trackball
+name: Hall Trackball Shield
+type: shield
+url: https://your-repo-url/hall-trackball
+requires: [nice_nano_v2]
+exposes: [gpio]
+features:
+  - pointing_device

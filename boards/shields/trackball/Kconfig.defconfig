@@ -1,0 +1,11 @@
+if SHIELD_TRACKBALL
+
+config ZMK_TRACKBALL
+    bool "Enable Hall Effect Trackball"
+    default y
+
+config ZMK_TRACKBALL_ENABLED
+    bool "Enable Trackball Functionality"
+    default y
+
+endif # SHIELD_TRACKBALL
