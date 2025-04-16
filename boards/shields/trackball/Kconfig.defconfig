@@ -8,4 +8,12 @@ config ZMK_TRACKBALL_ENABLED
     bool "Enable Trackball Functionality"
     default y
 
+config ZMK_TRACKBALL_STEP_WIDTH
+    int "Trackball Step Width"
+    default 10
+    help
+      The number of steps per millimeter of trackball movement.
+      This is used to calculate the amount of movement when the trackball is moved.
+      A higher value will result in a faster cursor speed, while a lower value will result in a slower cursor speed.
+
 endif # SHIELD_TRACKBALL

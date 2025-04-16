@@ -1,5 +1,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
 #include <zmk/endpoints.h>
 #include <zmk/hid.h>
@@ -24,7 +25,7 @@ static void trackball_trigger_handler_up(const struct device *dev, struct gpio_c
     (void)pins;
 
     int16_t x_movement = 0;
-    int16_t y_movement = 100;
+    int16_t y_movement = CONFIG_ZMK_TRACKBALL_STEP_WIDTH;
 
     printk("trackball up triggered\n");
 
@@ -42,7 +43,7 @@ static void trackball_trigger_handler_down(const struct device *dev, struct gpio
     (void)pins;
 
     int16_t x_movement = 0;
-    int16_t y_movement = -100;
+    int16_t y_movement = -CONFIG_ZMK_TRACKBALL_STEP_WIDTH;
 
     printk("trackball up triggered\n");
 
@@ -59,7 +60,7 @@ static void trackball_trigger_handler_right(const struct device *dev, struct gpi
     (void)cb;
     (void)pins;
 
-    int16_t x_movement = 100;
+    int16_t x_movement = CONFIG_ZMK_TRACKBALL_STEP_WIDTH;
     int16_t y_movement = 0;
 
     printk("trackball up triggered\n");
@@ -77,7 +78,7 @@ static void trackball_trigger_handler_left(const struct device *dev, struct gpio
     (void)cb;
     (void)pins;
 
-    int16_t x_movement = -100;
+    int16_t x_movement = -CONFIG_ZMK_TRACKBALL_STEP_WIDTH;
     int16_t y_movement = 0;
 
     printk("trackball up triggered\n");
