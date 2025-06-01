@@ -10,7 +10,7 @@ config ZMK_TRACKBALL_ENABLED
 
 config ZMK_TRACKBALL_STEP_WIDTH
     int "Trackball Step Width"
-    default 10
+    default 1
     help
       The number of steps per millimeter of trackball movement.
       This is used to calculate the amount of movement when the trackball is moved.

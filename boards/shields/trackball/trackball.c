@@ -7,6 +7,11 @@
 
 #define DT_DRV_COMPAT gpio_keys
 
+#define BASE_STEP_SIZE CONFIG_ZMK_TRACKBALL_STEP_WIDTH
+#define ACCELERATION_FACTOR 2
+#define ACCELERATION_TIMEOUT_MS 100 // Timeout in milliseconds
+
+
 struct trackball_config {
     struct gpio_dt_spec left;
     struct gpio_dt_spec right;
@@ -14,9 +19,39 @@ struct trackball_config {
     struct gpio_dt_spec down;
 };
 
+static struct {
+    int64_t last_event_time;
+    int consecutive_triggers;
+} acceleration_state = {0, 0};
+
 struct trackball_data {
     const struct device *dev;
+    // storage for cursor position
+    int16_t x_position;
+    int16_t y_position;
+    // storage for accelation values
+    int16_t x_acceleration;
+    int16_t y_acceleration;
 };
+
+static int16_t calculate_step_size(int16_t base_step) {
+    int64_t current_time = k_uptime_get();
+    int64_t elapsed_time = current_time - acceleration_state.last_event_time;
+
+    if (elapsed_time > ACCELERATION_TIMEOUT_MS) {
+        // Reset acceleration if timeout has passed
+        acceleration_state.consecutive_triggers = 0;
+    }
+
+    acceleration_state.last_event_time = current_time;
+
+    // Increase step size if consecutive triggers exceed threshold
+    if (acceleration_state.consecutive_triggers > 0) {
+        return base_step * acceleration_state.consecutive_triggers;
+    }
+
+    return base_step;
+}
 
 static void trackball_trigger_handler_up(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
@@ -25,12 +60,12 @@ static void trackball_trigger_handler_up(const struct device *dev, struct gpio_c
     (void)pins;
 
     int16_t x_movement = 0;
-    int16_t y_movement = CONFIG_ZMK_TRACKBALL_STEP_WIDTH;
+    int16_t y_movement = calculate_step_size(BASE_STEP_SIZE);
 
-    printk("trackball up triggered\n");
+    acceleration_state.consecutive_triggers++;
 
-    // Send mouse movement event via ZMK HID
-    //zmk_hid_mouse_movement_report(x_movement, y_movement);
+    printk("trackball up triggered, step size: %d\n", y_movement);
+
     zmk_hid_mouse_movement_set(x_movement, y_movement);
     zmk_endpoints_send_mouse_report();
     zmk_hid_mouse_movement_set(0, 0);
@@ -43,7 +78,9 @@ static void trackball_trigger_handler_down(const struct device *dev, struct gpio
     (void)pins;
 
     int16_t x_movement = 0;
-    int16_t y_movement = -CONFIG_ZMK_TRACKBALL_STEP_WIDTH;
+    int16_t y_movement = -(calculate_step_size(BASE_STEP_SIZE));
+
+    acceleration_state.consecutive_triggers++;
 
     printk("trackball up triggered\n");
 
@@ -60,8 +97,10 @@ static void trackball_trigger_handler_right(const struct device *dev, struct gpi
     (void)cb;
     (void)pins;
 
-    int16_t x_movement = CONFIG_ZMK_TRACKBALL_STEP_WIDTH;
     int16_t y_movement = 0;
+    int16_t x_movement = calculate_step_size(BASE_STEP_SIZE);
+
+    acceleration_state.consecutive_triggers++;
 
     printk("trackball up triggered\n");
 
@@ -78,8 +117,10 @@ static void trackball_trigger_handler_left(const struct device *dev, struct gpio
     (void)cb;
     (void)pins;
 
-    int16_t x_movement = -CONFIG_ZMK_TRACKBALL_STEP_WIDTH;
     int16_t y_movement = 0;
+    int16_t x_movement = -(calculate_step_size(BASE_STEP_SIZE));
+
+    acceleration_state.consecutive_triggers++;
 
     printk("trackball up triggered\n");
 
@@ -89,6 +130,27 @@ static void trackball_trigger_handler_left(const struct device *dev, struct gpio
     zmk_endpoints_send_mouse_report();
     zmk_hid_mouse_movement_set(0, 0);
 }
+
+// worker thread por cyclic pushing mouse data
+// static void trackball_worker_handler(struct k_work *work)
+// {
+//     struct trackball_data *data = CONTAINER_OF(work, struct trackball_data, work);
+//     const struct device *dev = data->dev;
+
+//     // while loop for cyclic task
+//     while (1) {
+//         // if mouse data not zero we can report it
+//         if (data->x_position != 0 || data->y_position != 0) {
+//             zmk_hid_mouse_movement_set(data->x_position, data->y_position);
+//             zmk_endpoints_send_mouse_report();
+//             data->x_position = 0;
+//             data->y_position = 0;
+//             // reset also the reported data
+//             zmk_hid_mouse_movement_set(0, 0);
+
+            
+//         }
+// }
 
 static int trackball_init(const struct device *dev)
 {
@@ -126,6 +188,9 @@ static int trackball_init(const struct device *dev)
     gpio_init_callback(&down_cb_data, trackball_trigger_handler_down, BIT(config->down.pin));
     gpio_add_callback(config->down.port, &down_cb_data);
     gpio_pin_interrupt_configure_dt(&config->down, GPIO_INT_EDGE_TO_ACTIVE);
+
+    // Initialize the worker thread
+    //k_work_init(&data->work, trackball_worker_handler);
 
     return 0;
 }
