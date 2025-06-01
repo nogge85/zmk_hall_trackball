@@ -1,5 +1,5 @@
 / {
-        trackball: trackball {
+    trackball: trackball {
         compatible = "gpio-keys";
         left {
             gpios = <&gpio0 8 GPIO_ACTIVE_HIGH>;

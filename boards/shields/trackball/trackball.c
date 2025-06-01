@@ -78,7 +78,7 @@ static void trackball_trigger_handler_down(const struct device *dev, struct gpio
     (void)pins;
 
     int16_t x_movement = 0;
-    int16_t y_movement = -BASE_STEP_SIZE);
+    int16_t y_movement = -BASE_STEP_SIZE;
 
     acceleration_state.consecutive_triggers++;
 
