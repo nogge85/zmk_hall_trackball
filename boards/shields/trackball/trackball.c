@@ -60,7 +60,7 @@ static void trackball_trigger_handler_up(const struct device *dev, struct gpio_c
     (void)pins;
 
     int16_t x_movement = 0;
-    int16_t y_movement = calculate_step_size(BASE_STEP_SIZE);
+    int16_t y_movement = BASE_STEP_SIZE;
 
     acceleration_state.consecutive_triggers++;
 
@@ -78,7 +78,7 @@ static void trackball_trigger_handler_down(const struct device *dev, struct gpio
     (void)pins;
 
     int16_t x_movement = 0;
-    int16_t y_movement = -(calculate_step_size(BASE_STEP_SIZE));
+    int16_t y_movement = -BASE_STEP_SIZE);
 
     acceleration_state.consecutive_triggers++;
 
@@ -98,7 +98,7 @@ static void trackball_trigger_handler_right(const struct device *dev, struct gpi
     (void)pins;
 
     int16_t y_movement = 0;
-    int16_t x_movement = calculate_step_size(BASE_STEP_SIZE);
+    int16_t x_movement = BASE_STEP_SIZE;
 
     acceleration_state.consecutive_triggers++;
 
@@ -118,7 +118,7 @@ static void trackball_trigger_handler_left(const struct device *dev, struct gpio
     (void)pins;
 
     int16_t y_movement = 0;
-    int16_t x_movement = -(calculate_step_size(BASE_STEP_SIZE));
+    int16_t x_movement = -BASE_STEP_SIZE;
 
     acceleration_state.consecutive_triggers++;
 
