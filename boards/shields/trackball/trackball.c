@@ -7,9 +7,7 @@
 
 #define DT_DRV_COMPAT gpio_keys
 
-#define BASE_STEP_SIZE CONFIG_ZMK_TRACKBALL_STEP_WIDTH
-#define ACCELERATION_FACTOR 2
-#define ACCELERATION_TIMEOUT_MS 100 // Timeout in milliseconds
+#define ACCELERATION_TIMEOUT_MS 200 // Timeout in milliseconds
 
 
 struct trackball_config {
@@ -17,6 +15,7 @@ struct trackball_config {
     struct gpio_dt_spec right;
     struct gpio_dt_spec up;
     struct gpio_dt_spec down;
+    struct gpio_dt_spec push;
 };
 
 static struct {
@@ -26,31 +25,48 @@ static struct {
 
 struct trackball_data {
     const struct device *dev;
-    // storage for cursor position
-    int16_t x_position;
-    int16_t y_position;
-    // storage for accelation values
-    int16_t x_acceleration;
-    int16_t y_acceleration;
+    // storage for last event time
+    int64_t last_event_time_up;
+    int64_t last_event_time_down;
+    int64_t last_event_time_left;
+    int64_t last_event_time_right;
+
 };
 
-static int16_t calculate_step_size(int16_t base_step) {
+static struct trackball_data trackball_data = {
+    .last_event_time_up = 0,
+    .last_event_time_down = 0,
+    .last_event_time_left = 0,
+    .last_event_time_right = 0,
+};
+
+static int16_t calculate_step_size(int64_t* last_event_time) {
     int64_t current_time = k_uptime_get();
-    int64_t elapsed_time = current_time - acceleration_state.last_event_time;
+    int64_t elapsed_time = current_time - *last_event_time;
+    int16_t acceleration =0;
 
     if (elapsed_time > ACCELERATION_TIMEOUT_MS) {
         // Reset acceleration if timeout has passed
-        acceleration_state.consecutive_triggers = 0;
+        acceleration = 1;
+    }
+    else if (elapsed_time <= ACCELERATION_TIMEOUT_MS && elapsed_time > 50) {
+        // If the time since the last event is less than the timeout and we have not triggered yet,
+        // we reset the consecutive triggers to 0.
+        acceleration = 2;
+    }
+    else if (elapsed_time <= 50 && elapsed_time > 10) {
+        // If the time since the last event is less than 50ms, we increase the consecutive triggers
+        acceleration = 5;
+    }
+    else {
+        // If the time since the last event is less than 10ms, we increase the consecutive triggers
+        acceleration = 15;
     }
 
-    acceleration_state.last_event_time = current_time;
 
-    // Increase step size if consecutive triggers exceed threshold
-    if (acceleration_state.consecutive_triggers > 0) {
-        return base_step * acceleration_state.consecutive_triggers;
-    }
+    *last_event_time = current_time;
 
-    return base_step;
+    return CONFIG_ZMK_TRACKBALL_STEP_WIDTH * acceleration_state.consecutive_triggers;
 }
 
 static void trackball_trigger_handler_up(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
@@ -60,9 +76,7 @@ static void trackball_trigger_handler_up(const struct device *dev, struct gpio_c
     (void)pins;
 
     int16_t x_movement = 0;
-    int16_t y_movement = BASE_STEP_SIZE;
-
-    acceleration_state.consecutive_triggers++;
+    int16_t y_movement = -(calculate_step_size(&trackball_data.last_event_time_up));
 
     printk("trackball up triggered, step size: %d\n", y_movement);
 
@@ -78,9 +92,7 @@ static void trackball_trigger_handler_down(const struct device *dev, struct gpio
     (void)pins;
 
     int16_t x_movement = 0;
-    int16_t y_movement = -BASE_STEP_SIZE;
-
-    acceleration_state.consecutive_triggers++;
+    int16_t y_movement = (calculate_step_size(&trackball_data.last_event_time_down));
 
     printk("trackball up triggered\n");
 
@@ -98,9 +110,7 @@ static void trackball_trigger_handler_right(const struct device *dev, struct gpi
     (void)pins;
 
     int16_t y_movement = 0;
-    int16_t x_movement = BASE_STEP_SIZE;
-
-    acceleration_state.consecutive_triggers++;
+    int16_t x_movement = (calculate_step_size(&trackball_data.last_event_time_right));
 
     printk("trackball up triggered\n");
 
@@ -118,9 +128,7 @@ static void trackball_trigger_handler_left(const struct device *dev, struct gpio
     (void)pins;
 
     int16_t y_movement = 0;
-    int16_t x_movement = -BASE_STEP_SIZE;
-
-    acceleration_state.consecutive_triggers++;
+    int16_t x_movement = -(calculate_step_size(&trackball_data.last_event_time_left));
 
     printk("trackball up triggered\n");
 
@@ -131,26 +139,21 @@ static void trackball_trigger_handler_left(const struct device *dev, struct gpio
     zmk_hid_mouse_movement_set(0, 0);
 }
 
-// worker thread por cyclic pushing mouse data
-// static void trackball_worker_handler(struct k_work *work)
-// {
-//     struct trackball_data *data = CONTAINER_OF(work, struct trackball_data, work);
-//     const struct device *dev = data->dev;
+static void trackball_push_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
+{
+    (void)dev;
+    (void)cb;
+    (void)pins;
 
-//     // while loop for cyclic task
-//     while (1) {
-//         // if mouse data not zero we can report it
-//         if (data->x_position != 0 || data->y_position != 0) {
-//             zmk_hid_mouse_movement_set(data->x_position, data->y_position);
-//             zmk_endpoints_send_mouse_report();
-//             data->x_position = 0;
-//             data->y_position = 0;
-//             // reset also the reported data
-//             zmk_hid_mouse_movement_set(0, 0);
+    // Handle push button event if needed
+    // For example, you could send a click event or toggle a mode
+    printk("trackball push button pressed\n");
 
-            
-//         }
-// }
+    zmk_hid_mouse_button_press(0);
+zmk_endpoints_send_mouse_report();
+zmk_hid_mouse_button_release(0);
+zmk_endpoints_send_mouse_report();
+}
 
 static int trackball_init(const struct device *dev)
 {
@@ -163,15 +166,17 @@ static int trackball_init(const struct device *dev)
         return -ENODEV;
     }
 
-    gpio_pin_configure_dt(&config->left, GPIO_INPUT | GPIO_INT_EDGE_TO_ACTIVE);
-    gpio_pin_configure_dt(&config->right, GPIO_INPUT | GPIO_INT_EDGE_TO_ACTIVE);
-    gpio_pin_configure_dt(&config->up, GPIO_INPUT | GPIO_INT_EDGE_TO_ACTIVE);
-    gpio_pin_configure_dt(&config->down, GPIO_INPUT | GPIO_INT_EDGE_TO_ACTIVE);
+    gpio_pin_configure_dt(&config->left, GPIO_INPUT | GPIO_PULL_DOWN | GPIO_INT_EDGE_TO_ACTIVE);
+    gpio_pin_configure_dt(&config->right, GPIO_INPUT | GPIO_PULL_DOWN | GPIO_INT_EDGE_TO_ACTIVE);
+    gpio_pin_configure_dt(&config->up, GPIO_INPUT | GPIO_PULL_DOWN | GPIO_INT_EDGE_TO_ACTIVE);
+    gpio_pin_configure_dt(&config->down, GPIO_INPUT | GPIO_PULL_DOWN | GPIO_INT_EDGE_TO_ACTIVE);
+    gpio_pin_configure_dt(&config->push, GPIO_INPUT | GPIO_PULL_UP | GPIO_INT_EDGE_TO_ACTIVE);
 
     static struct gpio_callback left_cb_data;
     static struct gpio_callback right_cb_data;
     static struct gpio_callback up_cb_data;
     static struct gpio_callback down_cb_data;
+    static struct gpio_callback push_cb_data;
 
     gpio_init_callback(&left_cb_data, trackball_trigger_handler_left, BIT(config->left.pin));
     gpio_add_callback(config->left.port, &left_cb_data);
@@ -189,8 +194,9 @@ static int trackball_init(const struct device *dev)
     gpio_add_callback(config->down.port, &down_cb_data);
     gpio_pin_interrupt_configure_dt(&config->down, GPIO_INT_EDGE_TO_ACTIVE);
 
-    // Initialize the worker thread
-    //k_work_init(&data->work, trackball_worker_handler);
+    gpio_init_callback(&push_cb_data, trackball_push_handler, BIT(config->push.pin));
+    gpio_add_callback(config->push.port, &push_cb_data);
+    gpio_pin_interrupt_configure_dt(&config->push, GPIO_INT_EDGE_TO_ACTIVE);
 
     return 0;
 }
@@ -201,6 +207,7 @@ static const struct trackball_config trackball_config_##n = { \
         .right = GPIO_DT_SPEC_GET(DT_CHILD(DT_NODELABEL(trackball), right), gpios),             \
         .up = GPIO_DT_SPEC_GET(DT_CHILD(DT_NODELABEL(trackball), up), gpios),                   \
         .down = GPIO_DT_SPEC_GET(DT_CHILD(DT_NODELABEL(trackball), down), gpios),               \
+        .push = GPIO_DT_SPEC_GET(DT_CHILD(DT_NODELABEL(trackball), push), gpios), \
 };                                                            \
 static struct trackball_data trackball_data_##n;              \
 DEVICE_DT_INST_DEFINE(n, trackball_init, NULL,                \
