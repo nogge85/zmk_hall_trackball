@@ -76,7 +76,7 @@ static void trackball_trigger_handler_up(const struct device *dev, struct gpio_c
     printk("trackball up triggered, step size: %d\n", y_movement);
 
     zmk_hid_mouse_movement_set(x_movement, y_movement);
-    zmk_endpoints_send_mouse_report();
+    zmk_endpoint_send_mouse_report();
     zmk_hid_mouse_movement_set(0, 0);
 }
 
@@ -94,7 +94,7 @@ static void trackball_trigger_handler_down(const struct device *dev, struct gpio
     // Send mouse movement event via ZMK HID
     //zmk_hid_mouse_movement_report(x_movement, y_movement);
     zmk_hid_mouse_movement_set(x_movement, y_movement);
-    zmk_endpoints_send_mouse_report();
+    zmk_endpoint_send_mouse_report();
     zmk_hid_mouse_movement_set(0, 0);
 }
 
@@ -112,7 +112,7 @@ static void trackball_trigger_handler_right(const struct device *dev, struct gpi
     // Send mouse movement event via ZMK HID
     //zmk_hid_mouse_movement_report(x_movement, y_movement);
     zmk_hid_mouse_movement_set(x_movement, y_movement);
-    zmk_endpoints_send_mouse_report();
+    zmk_endpoint_send_mouse_report();
     zmk_hid_mouse_movement_set(0, 0);
 }
 
@@ -130,7 +130,7 @@ static void trackball_trigger_handler_left(const struct device *dev, struct gpio
     // Send mouse movement event via ZMK HID
     //zmk_hid_mouse_movement_report(x_movement, y_movement);
     zmk_hid_mouse_movement_set(x_movement, y_movement);
-    zmk_endpoints_send_mouse_report();
+    zmk_endpoint_send_mouse_report();
     zmk_hid_mouse_movement_set(0, 0);
 }
 
