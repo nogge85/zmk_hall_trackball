@@ -145,9 +145,9 @@ static void trackball_push_handler(const struct device *dev, struct gpio_callbac
     printk("trackball push button pressed\n");
 
     zmk_hid_mouse_button_press(0);
-zmk_endpoints_send_mouse_report();
-zmk_hid_mouse_button_release(0);
-zmk_endpoints_send_mouse_report();
+    zmk_endpoint_send_mouse_report();
+    zmk_hid_mouse_button_release(0);
+    zmk_endpoint_send_mouse_report();
 }
 
 static int trackball_init(const struct device *dev)
