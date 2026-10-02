@@ -16,4 +16,12 @@ config ZMK_TRACKBALL_STEP_WIDTH
       This is used to calculate the amount of movement when the trackball is moved.
       A higher value will result in a faster cursor speed, while a lower value will result in a slower cursor speed.
 
+config ZMK_TRACKBALL_REPORT_COALESCE_MS
+        int "Trackball Mouse Report Coalescing Window (ms)"
+        range 0 10
+        default 2
+        help
+            Delay mouse reports by this many milliseconds to combine nearby movement events.
+            Set to 0 to send reports without an intentional coalescing delay.
+
 endif # SHIELD_TRACKBALL
