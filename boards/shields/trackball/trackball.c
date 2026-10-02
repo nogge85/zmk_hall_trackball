@@ -25,6 +25,7 @@ struct trackball_config {
 struct trackball_motion_state {
     int64_t last_event_time;
     int64_t filtered_interval;
+    int8_t last_direction;
     bool initialized;
 };
 
@@ -38,8 +39,13 @@ static struct trackball_data trackball_data;
 static atomic_t pending_x_movement;
 static atomic_t pending_y_movement;
 
-static int16_t calculate_step_size(struct trackball_motion_state *state) {
+static int16_t calculate_step_size(struct trackball_motion_state *state, int8_t direction) {
     int64_t current_time = k_uptime_get();
+    if (state->initialized && direction != state->last_direction &&
+        current_time - state->last_event_time < CONFIG_ZMK_TRACKBALL_DIRECTION_DEBOUNCE_MS) {
+        return 0;
+    }
+
     if (!state->initialized) {
         state->last_event_time = current_time;
         state->filtered_interval = ACCELERATION_TIMEOUT_MS;
@@ -59,6 +65,7 @@ static int16_t calculate_step_size(struct trackball_motion_state *state) {
                 (3 * state->filtered_interval + elapsed_time + 2) / 4;
         }
     }
+    state->last_direction = direction;
 
     int64_t scale_numerator = ACCELERATION_TIMEOUT_MS +
                               (MAX_ACCELERATION - 1) *
@@ -112,7 +119,7 @@ static void trackball_trigger_handler_up(const struct device *dev, struct gpio_c
     (void)pins;
 
     int16_t x_movement = 0;
-    int16_t y_movement = -calculate_step_size(&trackball_data.y_motion);
+    int16_t y_movement = -calculate_step_size(&trackball_data.y_motion, -1);
 
     queue_mouse_movement(x_movement, y_movement);
 }
@@ -124,7 +131,7 @@ static void trackball_trigger_handler_down(const struct device *dev, struct gpio
     (void)pins;
 
     int16_t x_movement = 0;
-    int16_t y_movement = calculate_step_size(&trackball_data.y_motion);
+    int16_t y_movement = calculate_step_size(&trackball_data.y_motion, 1);
 
     queue_mouse_movement(x_movement, y_movement);
 }
@@ -136,7 +143,7 @@ static void trackball_trigger_handler_right(const struct device *dev, struct gpi
     (void)pins;
 
     int16_t y_movement = 0;
-    int16_t x_movement = calculate_step_size(&trackball_data.x_motion);
+    int16_t x_movement = calculate_step_size(&trackball_data.x_motion, 1);
 
     queue_mouse_movement(x_movement, y_movement);
 }
@@ -148,7 +155,7 @@ static void trackball_trigger_handler_left(const struct device *dev, struct gpio
     (void)pins;
 
     int16_t y_movement = 0;
-    int16_t x_movement = -calculate_step_size(&trackball_data.x_motion);
+    int16_t x_movement = -calculate_step_size(&trackball_data.x_motion, -1);
 
     queue_mouse_movement(x_movement, y_movement);
 }

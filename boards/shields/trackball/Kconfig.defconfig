@@ -24,4 +24,12 @@ config ZMK_TRACKBALL_REPORT_COALESCE_MS
             Delay mouse reports by this many milliseconds to combine nearby movement events.
             Set to 0 to send reports without an intentional coalescing delay.
 
+config ZMK_TRACKBALL_DIRECTION_DEBOUNCE_MS
+        int "Trackball Direction Reversal Debounce (ms)"
+        range 0 20
+        default 5
+        help
+            Ignore opposite-direction events on the same axis when they arrive within this
+            interval. This filters rapid Hall sensor jitter; set to 0 to disable.
+
 endif # SHIELD_TRACKBALL
