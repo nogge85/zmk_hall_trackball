@@ -67,8 +67,6 @@ static int16_t calculate_step_size(struct trackball_motion_state *state) {
         step_size = INT16_MAX;
     }
 
-    *last_event_time = current_time;
-
     return step_size;
 }
 
