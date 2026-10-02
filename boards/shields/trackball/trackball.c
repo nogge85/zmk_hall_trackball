@@ -9,7 +9,7 @@
 #define DT_DRV_COMPAT gpio_keys
 
 #define ACCELERATION_TIMEOUT_MS 200 // Timeout in milliseconds
-#define MAX_ACCELERATION 8
+#define MAX_ACCELERATION 24
 
 
 struct trackball_config {
