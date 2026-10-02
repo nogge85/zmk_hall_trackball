@@ -2,12 +2,14 @@
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
+#include <stdint.h>
 #include <zmk/endpoints.h>
 #include <zmk/hid.h>
 
 #define DT_DRV_COMPAT gpio_keys
 
 #define ACCELERATION_TIMEOUT_MS 200 // Timeout in milliseconds
+#define MAX_ACCELERATION 8
 
 
 struct trackball_config {
@@ -38,30 +40,24 @@ static struct trackball_data trackball_data = {
 static int16_t calculate_step_size(int64_t* last_event_time) {
     int64_t current_time = k_uptime_get();
     int64_t elapsed_time = current_time - *last_event_time;
-    int16_t acceleration =0;
-
-    if (elapsed_time > ACCELERATION_TIMEOUT_MS) {
-        // Reset acceleration if timeout has passed
-        acceleration = 1;
-    }
-    else if ((elapsed_time <= ACCELERATION_TIMEOUT_MS) && (elapsed_time > 50)) {
-        // If the time since the last event is less than the timeout and we have not triggered yet,
-        // we reset the consecutive triggers to 0.
-        acceleration = 3;
-    }
-    else if ((elapsed_time <= 50) && (elapsed_time > 10)) {
-        // If the time since the last event is less than 50ms, we increase the consecutive triggers
-        acceleration = 15;
-    }
-    else {
-        // If the time since the last event is less than 10ms, we increase the consecutive triggers
-        acceleration = 50;
+    if (elapsed_time < 0) {
+        elapsed_time = 0;
+    } else if (elapsed_time > ACCELERATION_TIMEOUT_MS) {
+        elapsed_time = ACCELERATION_TIMEOUT_MS;
     }
 
+    int64_t scale_numerator = ACCELERATION_TIMEOUT_MS +
+                              (MAX_ACCELERATION - 1) * (ACCELERATION_TIMEOUT_MS - elapsed_time);
+    int64_t step_size = ((int64_t)CONFIG_ZMK_TRACKBALL_STEP_WIDTH * scale_numerator +
+                         ACCELERATION_TIMEOUT_MS / 2) /
+                        ACCELERATION_TIMEOUT_MS;
+    if (step_size > INT16_MAX) {
+        step_size = INT16_MAX;
+    }
 
     *last_event_time = current_time;
 
-    return CONFIG_ZMK_TRACKBALL_STEP_WIDTH * acceleration;
+    return step_size;
 }
 
 static void trackball_trigger_handler_up(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
