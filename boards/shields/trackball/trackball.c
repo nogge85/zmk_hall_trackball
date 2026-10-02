@@ -2,6 +2,7 @@
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/sys/atomic.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <zmk/endpoints.h>
@@ -34,6 +35,8 @@ struct trackball_data {
 };
 
 static struct trackball_data trackball_data;
+static atomic_t pending_x_movement;
+static atomic_t pending_y_movement;
 
 static int16_t calculate_step_size(struct trackball_motion_state *state) {
     int64_t current_time = k_uptime_get();
@@ -70,6 +73,38 @@ static int16_t calculate_step_size(struct trackball_motion_state *state) {
     return step_size;
 }
 
+static int16_t clamp_mouse_movement(atomic_val_t movement) {
+    if (movement > INT16_MAX) {
+        return INT16_MAX;
+    }
+    if (movement < INT16_MIN) {
+        return INT16_MIN;
+    }
+    return movement;
+}
+
+static void trackball_mouse_work_handler(struct k_work *work) {
+    (void)work;
+
+    int16_t x_movement = clamp_mouse_movement(atomic_set(&pending_x_movement, 0));
+    int16_t y_movement = clamp_mouse_movement(atomic_set(&pending_y_movement, 0));
+    if (x_movement == 0 && y_movement == 0) {
+        return;
+    }
+
+    zmk_hid_mouse_movement_set(x_movement, y_movement);
+    zmk_endpoint_send_mouse_report();
+    zmk_hid_mouse_movement_set(0, 0);
+}
+
+K_WORK_DEFINE(trackball_mouse_work, trackball_mouse_work_handler);
+
+static void queue_mouse_movement(int16_t x_movement, int16_t y_movement) {
+    atomic_add(&pending_x_movement, x_movement);
+    atomic_add(&pending_y_movement, y_movement);
+    k_work_submit(&trackball_mouse_work);
+}
+
 static void trackball_trigger_handler_up(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
     (void)dev;
@@ -79,11 +114,7 @@ static void trackball_trigger_handler_up(const struct device *dev, struct gpio_c
     int16_t x_movement = 0;
     int16_t y_movement = -calculate_step_size(&trackball_data.y_motion);
 
-    printk("trackball up triggered, step size: %d\n", y_movement);
-
-    zmk_hid_mouse_movement_set(x_movement, y_movement);
-    zmk_endpoint_send_mouse_report();
-    zmk_hid_mouse_movement_set(0, 0);
+    queue_mouse_movement(x_movement, y_movement);
 }
 
 static void trackball_trigger_handler_down(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
@@ -95,13 +126,7 @@ static void trackball_trigger_handler_down(const struct device *dev, struct gpio
     int16_t x_movement = 0;
     int16_t y_movement = calculate_step_size(&trackball_data.y_motion);
 
-    printk("trackball up triggered\n");
-
-    // Send mouse movement event via ZMK HID
-    //zmk_hid_mouse_movement_report(x_movement, y_movement);
-    zmk_hid_mouse_movement_set(x_movement, y_movement);
-    zmk_endpoint_send_mouse_report();
-    zmk_hid_mouse_movement_set(0, 0);
+    queue_mouse_movement(x_movement, y_movement);
 }
 
 static void trackball_trigger_handler_right(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
@@ -113,13 +138,7 @@ static void trackball_trigger_handler_right(const struct device *dev, struct gpi
     int16_t y_movement = 0;
     int16_t x_movement = calculate_step_size(&trackball_data.x_motion);
 
-    printk("trackball up triggered\n");
-
-    // Send mouse movement event via ZMK HID
-    //zmk_hid_mouse_movement_report(x_movement, y_movement);
-    zmk_hid_mouse_movement_set(x_movement, y_movement);
-    zmk_endpoint_send_mouse_report();
-    zmk_hid_mouse_movement_set(0, 0);
+    queue_mouse_movement(x_movement, y_movement);
 }
 
 static void trackball_trigger_handler_left(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
@@ -131,13 +150,7 @@ static void trackball_trigger_handler_left(const struct device *dev, struct gpio
     int16_t y_movement = 0;
     int16_t x_movement = -calculate_step_size(&trackball_data.x_motion);
 
-    printk("trackball up triggered\n");
-
-    // Send mouse movement event via ZMK HID
-    //zmk_hid_mouse_movement_report(x_movement, y_movement);
-    zmk_hid_mouse_movement_set(x_movement, y_movement);
-    zmk_endpoint_send_mouse_report();
-    zmk_hid_mouse_movement_set(0, 0);
+    queue_mouse_movement(x_movement, y_movement);
 }
 
 static void trackball_push_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
