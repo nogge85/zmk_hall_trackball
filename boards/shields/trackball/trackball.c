@@ -12,6 +12,7 @@
 
 #define ACCELERATION_TIMEOUT_MS 200 // Timeout in milliseconds
 #define MAX_ACCELERATION 24
+#define MOUSE_REPORT_COALESCE_MS 2
 
 
 struct trackball_config {
@@ -97,12 +98,12 @@ static void trackball_mouse_work_handler(struct k_work *work) {
     zmk_hid_mouse_movement_set(0, 0);
 }
 
-K_WORK_DEFINE(trackball_mouse_work, trackball_mouse_work_handler);
+K_WORK_DELAYABLE_DEFINE(trackball_mouse_work, trackball_mouse_work_handler);
 
 static void queue_mouse_movement(int16_t x_movement, int16_t y_movement) {
     atomic_add(&pending_x_movement, x_movement);
     atomic_add(&pending_y_movement, y_movement);
-    k_work_submit(&trackball_mouse_work);
+    k_work_schedule(&trackball_mouse_work, K_MSEC(MOUSE_REPORT_COALESCE_MS));
 }
 
 static void trackball_trigger_handler_up(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
