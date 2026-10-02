@@ -3,6 +3,7 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <zmk/endpoints.h>
 #include <zmk/hid.h>
 
@@ -20,34 +21,45 @@ struct trackball_config {
     struct gpio_dt_spec push;
 };
 
+struct trackball_motion_state {
+    int64_t last_event_time;
+    int64_t filtered_interval;
+    bool initialized;
+};
+
 struct trackball_data {
     const struct device *dev;
-    // storage for last event time
-    int64_t last_event_time_up;
-    int64_t last_event_time_down;
-    int64_t last_event_time_left;
-    int64_t last_event_time_right;
-
+    struct trackball_motion_state x_motion;
+    struct trackball_motion_state y_motion;
 };
 
-static struct trackball_data trackball_data = {
-    .last_event_time_up = 0,
-    .last_event_time_down = 0,
-    .last_event_time_left = 0,
-    .last_event_time_right = 0,
-};
+static struct trackball_data trackball_data;
 
-static int16_t calculate_step_size(int64_t* last_event_time) {
+static int16_t calculate_step_size(struct trackball_motion_state *state) {
     int64_t current_time = k_uptime_get();
-    int64_t elapsed_time = current_time - *last_event_time;
-    if (elapsed_time < 0) {
-        elapsed_time = 0;
-    } else if (elapsed_time > ACCELERATION_TIMEOUT_MS) {
-        elapsed_time = ACCELERATION_TIMEOUT_MS;
+    if (!state->initialized) {
+        state->last_event_time = current_time;
+        state->filtered_interval = ACCELERATION_TIMEOUT_MS;
+        state->initialized = true;
+    } else {
+        int64_t elapsed_time = current_time - state->last_event_time;
+        state->last_event_time = current_time;
+
+        if (elapsed_time < 0) {
+            elapsed_time = 0;
+        }
+
+        if (elapsed_time >= ACCELERATION_TIMEOUT_MS) {
+            state->filtered_interval = ACCELERATION_TIMEOUT_MS;
+        } else {
+            state->filtered_interval =
+                (3 * state->filtered_interval + elapsed_time + 2) / 4;
+        }
     }
 
     int64_t scale_numerator = ACCELERATION_TIMEOUT_MS +
-                              (MAX_ACCELERATION - 1) * (ACCELERATION_TIMEOUT_MS - elapsed_time);
+                              (MAX_ACCELERATION - 1) *
+                                  (ACCELERATION_TIMEOUT_MS - state->filtered_interval);
     int64_t step_size = ((int64_t)CONFIG_ZMK_TRACKBALL_STEP_WIDTH * scale_numerator +
                          ACCELERATION_TIMEOUT_MS / 2) /
                         ACCELERATION_TIMEOUT_MS;
@@ -67,7 +79,7 @@ static void trackball_trigger_handler_up(const struct device *dev, struct gpio_c
     (void)pins;
 
     int16_t x_movement = 0;
-    int16_t y_movement = -(calculate_step_size(&(trackball_data.last_event_time_up)));
+    int16_t y_movement = -calculate_step_size(&trackball_data.y_motion);
 
     printk("trackball up triggered, step size: %d\n", y_movement);
 
@@ -83,7 +95,7 @@ static void trackball_trigger_handler_down(const struct device *dev, struct gpio
     (void)pins;
 
     int16_t x_movement = 0;
-    int16_t y_movement = (calculate_step_size(&(trackball_data.last_event_time_down)));
+    int16_t y_movement = calculate_step_size(&trackball_data.y_motion);
 
     printk("trackball up triggered\n");
 
@@ -101,7 +113,7 @@ static void trackball_trigger_handler_right(const struct device *dev, struct gpi
     (void)pins;
 
     int16_t y_movement = 0;
-    int16_t x_movement = (calculate_step_size(&(trackball_data.last_event_time_right)));
+    int16_t x_movement = calculate_step_size(&trackball_data.x_motion);
 
     printk("trackball up triggered\n");
 
@@ -119,7 +131,7 @@ static void trackball_trigger_handler_left(const struct device *dev, struct gpio
     (void)pins;
 
     int16_t y_movement = 0;
-    int16_t x_movement = -(calculate_step_size(&(trackball_data.last_event_time_left)));
+    int16_t x_movement = -calculate_step_size(&trackball_data.x_motion);
 
     printk("trackball up triggered\n");
 
